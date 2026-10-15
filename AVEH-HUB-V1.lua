@@ -1,5 +1,6 @@
--- aveh aimbot v12 — delta android
-print("[Aveh] init...")
+-- aveh aimbot v13.1 — android / delta
+-- snow overlay · avatar preview · tracers · nametags · antiafk
+
 local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -18,25 +19,24 @@ for _, n in ipairs({"AvehAimbot", "AvehFovGui"}) do
 end
 if _G.AvehAimbotCleanup then pcall(_G.AvehAimbotCleanup) end
 pcall(function() RunService:UnbindFromRenderStep("AvehAimLoop") end)
-print("[Aveh] cleanup ok")
 
 local track = {}
 local function addTrack(t, c) table.insert(t, c); return c end
 
--- ============================================================
--- КОНФИГ
--- ============================================================
 local C = {
     Enabled=false, AlwaysAim=isTouch, Smoothness=0.65, FOV=150,
-    MaxDist=500, DrawFOV=true, AimHeld=false, TeamCheck=true,
+    MaxDist=500, DrawFOV=true, AimHeld=false, TeamCheck=true, IgnoreFriends=true,
 
     ESP=false, ESPMode="void", ESPHealth=true, ESPBox=false, ESPSkeleton=true,
+    ESPTracers=true, ESPName=true,
 
     Noclip=false, Fly=false, FlySpeed=60, FlyAura=true, FlyAnim=true, FlyTilt=true,
     FlyAnimR15=616006541, FlyAnimR6=616005863,
 
     SpeedHack=16, SpeedOn=false,
+    AntiAFK=true, AutoJump=false, JumpPower=50,
 
+    Snow=true,
     MusicId="", MusicVolume=0.5,
 }
 
@@ -44,9 +44,6 @@ local state = { lang="ru", theme="dark", scale=1.00, tab="aim", customColor=nil 
 local offsetFromCenter = Vector2.new(0, 0)
 local miniOffset       = Vector2.new(0, 0)
 
--- ============================================================
--- ТЕМЫ
--- ============================================================
 local THEMES = {
     dark = {
         bg=Color3.fromRGB(14,14,22), bg2=Color3.fromRGB(22,22,34),
@@ -90,28 +87,31 @@ local function getAccent2()
     return THEMES[state.theme].accent2
 end
 
--- ============================================================
--- СТРОКИ
--- ============================================================
 local STR = {
     ru = {
-        title="AVEH · AIMBOT",
+        title="AVEH · AIMBOT v13.1",
         tab_aim="Аим", tab_esp="ESP", tab_mov="Движение", tab_music="Музыка", tab_cfg="Настройки",
         enabled="Включить аимбот", always="Всегда аимить", team_check="Не целиться в союзников",
+        ignore_friends="Игнор друзей",
         smooth="Плавность", fov="FOV", maxdist="Макс. дистанция",
         draw_fov="Показывать FOV",
         section_aim="АИМБОТ", section_info="ИНФО", section_esp="ESP", section_preview="ПРЕДПРОСМОТР",
         esp_enable="Включить ESP", esp_mode="Режим ESP", esp_health="Health bar",
         esp_box="Box (рамка)", esp_skel="Skeleton (кости)",
+        esp_tracers="Трассеры", esp_name="Ник + дистанция",
         section_move="ДВИЖЕНИЕ",
         noclip="Noclip", fly="Fly (джойстик)", fly_speed="Скорость полёта",
         fly_aura="Аура полёта", fly_anim="Анимация полёта", fly_tilt="Наклон по направлению",
         speed="Speedhack",
+        section_util="УТИЛИТЫ",
+        antiafk="Anti-AFK", autojump="Авто-прыжок", jumppower="Сила прыжка",
+        snow="Снег на экране",
         section_music="МУЗЫКА ROBLOX", music_id="ID трека", music_play="▶ Играть",
         music_pause="⏸ Пауза", music_stop="■ Стоп", music_vol="Громкость",
         music_hint="Введи числовой ID звука (например 1837879082)",
         section_lang="ЯЗЫК", section_theme="ТЕМА",
         section_accent="ЦВЕТ АКЦЕНТА", section_size="РАЗМЕР ИНТЕРФЕЙСА",
+        section_visual="ВИЗУАЛ",
         accent_custom="Свой hex (#RRGGBB)", accent_apply="Применить",
         wall_check="Wall check: всегда включён",
         hint="Джойстик ведёт, камера — высота. ◎ — удержание аима.",
@@ -119,23 +119,29 @@ local STR = {
         lang_ru="Русский", lang_en="English", size_reset="Сброс (1.00)",
     },
     en = {
-        title="AVEH · AIMBOT",
+        title="AVEH · AIMBOT v13.1",
         tab_aim="Aim", tab_esp="ESP", tab_mov="Movement", tab_music="Music", tab_cfg="Settings",
         enabled="Enable aimbot", always="Always aim", team_check="Ignore teammates",
+        ignore_friends="Ignore friends",
         smooth="Smoothness", fov="FOV", maxdist="Max distance",
         draw_fov="Draw FOV",
         section_aim="AIMBOT", section_info="INFO", section_esp="ESP", section_preview="PREVIEW",
         esp_enable="Enable ESP", esp_mode="ESP mode", esp_health="Health bar",
         esp_box="Box", esp_skel="Skeleton",
+        esp_tracers="Tracers", esp_name="Name + distance",
         section_move="MOVEMENT",
         noclip="Noclip", fly="Fly (joystick)", fly_speed="Fly speed",
         fly_aura="Fly aura", fly_anim="Fly animation", fly_tilt="Tilt by direction",
         speed="Speedhack",
+        section_util="UTILITIES",
+        antiafk="Anti-AFK", autojump="Auto-jump", jumppower="Jump power",
+        snow="Screen snow",
         section_music="ROBLOX MUSIC", music_id="Track ID", music_play="▶ Play",
         music_pause="⏸ Pause", music_stop="■ Stop", music_vol="Volume",
         music_hint="Enter numeric sound ID (e.g. 1837879082)",
         section_lang="LANGUAGE", section_theme="THEME",
         section_accent="ACCENT COLOR", section_size="UI SIZE",
+        section_visual="VISUAL",
         accent_custom="Custom hex (#RRGGBB)", accent_apply="Apply",
         wall_check="Wall check: always on",
         hint="Joystick drives, camera sets altitude. ◎ = hold aim.",
@@ -145,25 +151,88 @@ local STR = {
 }
 
 -- ============================================================
--- FOV CIRCLE
+-- FOV + ESP LAYER + SNOW LAYER
 -- ============================================================
 local fovGui = Instance.new("ScreenGui")
 fovGui.Name = "AvehFovGui"
 fovGui.ResetOnSpawn = false; fovGui.IgnoreGuiInset = true
 fovGui.DisplayOrder = 998; fovGui.Parent = PG
 
+-- снег под всем
+local snowLayer = Instance.new("Frame")
+snowLayer.Name = "SnowLayer"
+snowLayer.Size = UDim2.new(1, 0, 1, 0)
+snowLayer.BackgroundTransparency = 1
+snowLayer.BorderSizePixel = 0
+snowLayer.Active = false
+snowLayer.ZIndex = 0
+snowLayer.Parent = fovGui
+
 local espLayer = Instance.new("Frame")
 espLayer.Name = "ESPLayer"
 espLayer.Size = UDim2.new(1,0,1,0)
 espLayer.BackgroundTransparency = 1; espLayer.BorderSizePixel = 0
+espLayer.Active = false
+espLayer.ZIndex = 3
 espLayer.Parent = fovGui
 
+-- ============================================================
+-- СНЕГ — 60 круглых капель, живёт в fovGui, видно всегда
+-- ============================================================
+local SNOW_COUNT = 60
+local snowFlakes = {}
+do
+    local v = vp()
+    for i = 1, SNOW_COUNT do
+        local f = Instance.new("Frame")
+        f.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        f.BackgroundTransparency = 0.15 + math.random() * 0.5
+        f.BorderSizePixel = 0
+        f.Active = false
+        f.ZIndex = 1
+        f.Parent = snowLayer
+        Instance.new("UICorner", f).CornerRadius = UDim.new(1, 0)
+        local sz = 2 + math.random() * 4
+        f.Size = UDim2.fromOffset(sz, sz)
+        snowFlakes[i] = {
+            gui   = f,
+            x     = math.random() * v.X,
+            y     = math.random() * v.Y,
+            size  = sz,
+            speed = 20 + math.random() * 40 + sz * 4,
+            amp   = 8 + math.random() * 18,
+            freq  = 0.5 + math.random() * 1.2,
+            phase = math.random() * math.pi * 2,
+        }
+    end
+end
+
+local snowTime = 0
+addTrack(track, RunService.RenderStepped:Connect(function(dt)
+    if not C.Snow then return end
+    dt = math.min(dt, 0.1)
+    local size = vp()
+    local W, H = size.X, size.Y
+    snowTime = snowTime + dt
+    for _, fl in ipairs(snowFlakes) do
+        fl.y = fl.y + fl.speed * dt
+        if fl.y > H + 5 then
+            fl.y = -fl.size - math.random() * 30
+            fl.x = math.random() * W
+        end
+        local px = fl.x + math.sin(snowTime * fl.freq + fl.phase) * fl.amp
+        fl.gui.Position = UDim2.fromOffset(px, fl.y)
+    end
+end))
+
+-- FOV круг
 local fovFrame = Instance.new("Frame")
 fovFrame.AnchorPoint = Vector2.new(0.5,0.5)
 fovFrame.Position = UDim2.new(0.5,0,0.5,0)
 fovFrame.BackgroundTransparency = 1
 fovFrame.BorderSizePixel = 0
 fovFrame.Visible = false
+fovFrame.ZIndex = 4
 fovFrame.Parent = fovGui
 Instance.new("UICorner", fovFrame).CornerRadius = UDim.new(1,0)
 local fovStroke = Instance.new("UIStroke", fovFrame); fovStroke.Thickness = 1.6
@@ -180,14 +249,23 @@ local function updateFovCircle(dt)
     fovStroke.Thickness = 1.6 + math.sin(fovPulse)*0.4
 end
 
-print("[Aveh] fov ok")
-
 -- ============================================================
 -- AIM
 -- ============================================================
+local friends = {}
+local function refreshFriends()
+    friends = {}
+    pcall(function()
+        local ok, list = pcall(function() return LP:GetFriendsOnline() end)
+        if ok and type(list) == "table" then
+            for _, f in ipairs(list) do if f.VisitorId then friends[f.VisitorId] = true end end
+        end
+    end)
+end
+
 local function isEnemy(plr)
-    if not C.TeamCheck then return true end
-    if LP.Team and plr.Team and LP.Team == plr.Team then return false end
+    if C.TeamCheck and LP.Team and plr.Team and LP.Team == plr.Team then return false end
+    if C.IgnoreFriends and friends[plr.UserId] then return false end
     return true
 end
 
@@ -217,7 +295,6 @@ local function wallClear(targetChar, aimPart)
 end
 
 local lockedTarget, lockLost = nil, 0
-
 local function scoreTarget(part)
     local c = cam()
     local pos, on = c:WorldToViewportPoint(part.Position)
@@ -225,11 +302,9 @@ local function scoreTarget(part)
     local size = vp()
     return (Vector2.new(pos.X,pos.Y) - Vector2.new(size.X/2,size.Y/2)).Magnitude
 end
-
 local function aimPartOf(char)
     return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
 end
-
 local function pickBest()
     local best, bestDist = nil, C.FOV
     local myChar = getChar()
@@ -251,7 +326,6 @@ local function pickBest()
     end
     return best
 end
-
 local function findTarget()
     if lockedTarget then
         local parent = lockedTarget.Parent
@@ -259,8 +333,7 @@ local function findTarget()
         if parent and hum and hum.Health > 0 then
             local d = scoreTarget(lockedTarget)
             if d and d < C.FOV and wallClear(parent, lockedTarget) then
-                lockLost = 0
-                return lockedTarget
+                lockLost = 0; return lockedTarget
             end
         end
         lockLost = lockLost + 1
@@ -277,7 +350,6 @@ end
 -- ============================================================
 local espTracked = {}
 local hue = 0
-
 local MODES = {
     void    = { fill=Color3.fromRGB(0,0,0),       outline=Color3.fromRGB(160,60,255),
                 light=Color3.fromRGB(140,60,255), bright=2.4, range=14,
@@ -384,43 +456,33 @@ local function applyHighlightMode(entry, mode, rainbowCol)
     end
 end
 
--- ============================================================
--- HEALTH BAR
--- ============================================================
 local function makeHealthBar(hrp)
     local bb = Instance.new("BillboardGui")
-    bb.Name = "AvehHB"
-    bb.Adornee = hrp
+    bb.Name = "AvehHB"; bb.Adornee = hrp
     bb.Size = UDim2.new(0, 80, 0, 32)
     bb.StudsOffset = Vector3.new(3.4, 0.6, 0)
     bb.AlwaysOnTop = true; bb.MaxDistance = 1500; bb.LightInfluence = 0
     bb.Parent = hrp
-
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, 0, 0, 14)
-    label.BackgroundTransparency = 1
-    label.Text = "100"
+    label.BackgroundTransparency = 1; label.Text = "100"
     label.TextColor3 = Color3.fromRGB(255,255,255)
     label.Font = Enum.Font.GothamBold; label.TextSize = 12
     label.TextStrokeTransparency = 0.2
     label.TextStrokeColor3 = Color3.fromRGB(0,0,0)
     label.Parent = bb
-
     local barBg = Instance.new("Frame")
     barBg.Size = UDim2.new(1, 0, 0, 8)
     barBg.Position = UDim2.new(0, 0, 0, 18)
     barBg.BackgroundColor3 = Color3.fromRGB(14,14,20)
-    barBg.BorderSizePixel = 0
-    barBg.Parent = bb
+    barBg.BorderSizePixel = 0; barBg.Parent = bb
     Instance.new("UICorner", barBg).CornerRadius = UDim.new(1,0)
     local s = Instance.new("UIStroke", barBg); s.Color = Color3.fromRGB(0,0,0); s.Thickness = 1.2
-
     local fill = Instance.new("Frame")
     fill.Size = UDim2.new(1,-2,1,-2); fill.Position = UDim2.new(0,1,0,1)
     fill.BackgroundColor3 = Color3.fromRGB(60,220,90)
     fill.BorderSizePixel = 0; fill.Parent = barBg
     Instance.new("UICorner", fill).CornerRadius = UDim.new(1,0)
-
     return { billboard=bb, fill=fill, label=label }
 end
 local function updateHealthBar(hb, hum)
@@ -438,9 +500,65 @@ local function updateHealthBar(hb, hum)
     hb.label.Text = tostring(math.floor(hum.Health + 0.5)) .. " / " .. tostring(math.floor(maxH))
 end
 
--- ============================================================
--- BOX / SKELETON
--- ============================================================
+local function makeNameTag(hrp)
+    local bb = Instance.new("BillboardGui")
+    bb.Name = "AvehName"; bb.Adornee = hrp
+    bb.Size = UDim2.new(0, 140, 0, 18)
+    bb.StudsOffset = Vector3.new(0, 3.4, 0)
+    bb.AlwaysOnTop = true; bb.MaxDistance = 800; bb.LightInfluence = 0
+    bb.Parent = hrp
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, 0, 1, 0)
+    l.BackgroundTransparency = 1; l.Text = ""
+    l.TextColor3 = Color3.fromRGB(255,255,255)
+    l.Font = Enum.Font.GothamBold; l.TextSize = 12
+    l.TextStrokeTransparency = 0.15
+    l.TextStrokeColor3 = Color3.fromRGB(0,0,0)
+    l.Parent = bb
+    return { billboard=bb, label=l }
+end
+local function updateNameTag(nt, plr, hrp)
+    if not nt or not nt.billboard or not nt.billboard.Parent then return end
+    local myChar = getChar()
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local dist = "?"
+    if myRoot then dist = tostring(math.floor((hrp.Position - myRoot.Position).Magnitude)) end
+    nt.label.Text = plr.Name .. " [" .. dist .. "m]"
+end
+
+local tracerCache = {}
+local function getTracer(plr)
+    local t = tracerCache[plr]
+    if t and t.Parent then return t end
+    local f = Instance.new("Frame")
+    f.AnchorPoint = Vector2.new(0.5, 0)
+    f.BorderSizePixel = 0
+    f.Visible = false
+    f.ZIndex = 2
+    f.Parent = espLayer
+    tracerCache[plr] = f
+    return f
+end
+local function updateTracer(plr, screenPos, color)
+    local t = getTracer(plr)
+    if not t then return end
+    if not screenPos then t.Visible = false; return end
+    local size = vp()
+    local fromX, fromY = size.X / 2, size.Y
+    local toX, toY = screenPos.X, screenPos.Y
+    local dx, dy = toX - fromX, toY - fromY
+    local len = math.sqrt(dx*dx + dy*dy)
+    t.Size = UDim2.fromOffset(math.max(len, 1), 1.4)
+    t.Position = UDim2.fromOffset((fromX + toX)/2, (fromY + toY)/2)
+    t.Rotation = math.deg(math.atan2(dy, dx))
+    t.BackgroundColor3 = color
+    t.Visible = true
+end
+local function clearTracer(plr)
+    local t = tracerCache[plr]
+    if t then pcall(function() t:Destroy() end); tracerCache[plr] = nil end
+end
+
 local SKELETON_R15 = {
     {"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
     {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
@@ -457,6 +575,7 @@ local function mkLineFrame()
     f.AnchorPoint = Vector2.new(0.5,0.5)
     f.BorderSizePixel = 0
     f.Visible = false
+    f.ZIndex = 2
     f.Parent = espLayer
     return f
 end
@@ -471,7 +590,7 @@ end
 local function mkBoxFrame()
     local f = Instance.new("Frame")
     f.BackgroundTransparency = 1; f.BorderSizePixel = 0
-    f.Visible = false; f.Parent = espLayer
+    f.Visible = false; f.ZIndex = 2; f.Parent = espLayer
     local s = Instance.new("UIStroke", f)
     s.Thickness = 1.6
     return f, s
@@ -522,29 +641,26 @@ local function updateOverlay(entry, char, hrp, color)
     end
 end
 
--- ============================================================
--- ESP УПРАВЛЕНИЕ
--- ============================================================
 local function safeDestroy(o) if o then pcall(function() o:Destroy() end) end end
 local function clearESP(plr)
     local e = espTracked[plr]; if not e then return end
     if e.char then restoreBody(e.char) end
     safeDestroy(e.highlight); safeDestroy(e.light)
     if e.health then safeDestroy(e.health.billboard) end
+    if e.nametag then safeDestroy(e.nametag.billboard) end
     safeDestroy(e.box)
     if e.skel then for _, l in pairs(e.skel) do safeDestroy(l) end end
     espTracked[plr] = nil
+    clearTracer(plr)
 end
 local function ensureESP(plr, char, hrp)
     local entry = espTracked[plr]
     if entry and entry.char ~= char then clearESP(plr); entry = nil end
     if not entry then entry = { char = char }; espTracked[plr] = entry end
-
     if not (entry.highlight and entry.highlight.Parent == char) then
         safeDestroy(entry.highlight)
         local h = Instance.new("Highlight")
-        h.Name = "AvehHL"
-        h.Adornee = char
+        h.Name = "AvehHL"; h.Adornee = char
         h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
         h.Parent = char
         entry.highlight = h
@@ -552,8 +668,7 @@ local function ensureESP(plr, char, hrp)
     if not (entry.light and entry.light.Parent == hrp) then
         safeDestroy(entry.light)
         local l = Instance.new("PointLight")
-        l.Name = "AvehLight"
-        l.Parent = hrp
+        l.Name = "AvehLight"; l.Parent = hrp
         entry.light = l
     end
     return entry
@@ -579,26 +694,46 @@ local function updateOne(plr, rainbowCol, accent)
         end
         updateHealthBar(entry.health, hum)
     elseif entry.health then
-        safeDestroy(entry.health.billboard)
-        entry.health = nil
+        safeDestroy(entry.health.billboard); entry.health = nil
+    end
+    if C.ESPName then
+        if not (entry.nametag and entry.nametag.billboard.Parent == hrp) then
+            if entry.nametag then safeDestroy(entry.nametag.billboard) end
+            entry.nametag = makeNameTag(hrp)
+        end
+        updateNameTag(entry.nametag, plr, hrp)
+    elseif entry.nametag then
+        safeDestroy(entry.nametag.billboard); entry.nametag = nil
     end
     local color = (C.ESPMode == "rainbow") and rainbowCol or accent
     updateOverlay(entry, char, hrp, color)
+    if C.ESPTracers then
+        local sp, on = cam():WorldToViewportPoint(hrp.Position)
+        if on and sp.Z > 0 then
+            updateTracer(plr, Vector2.new(sp.X, sp.Y), color)
+        else
+            updateTracer(plr, nil, color)
+        end
+    else
+        updateTracer(plr, nil, color)
+    end
 end
 local function updateESP(dt)
     local toRemove = nil
     for plr in pairs(espTracked) do
         if not plr.Parent then
-            toRemove = toRemove or {}
-            table.insert(toRemove, plr)
+            toRemove = toRemove or {}; table.insert(toRemove, plr)
         end
     end
     if toRemove then for _, plr in ipairs(toRemove) do clearESP(plr) end end
-
+    for plr in pairs(tracerCache) do
+        if not plr.Parent or not espTracked[plr] then clearTracer(plr) end
+    end
     if not C.ESP then
         local all = {}
         for plr in pairs(espTracked) do table.insert(all, plr) end
         for _, plr in ipairs(all) do clearESP(plr) end
+        for plr in pairs(tracerCache) do clearTracer(plr) end
         return
     end
     hue = (hue + dt*0.22) % 1
@@ -610,11 +745,6 @@ local function updateESP(dt)
 end
 addTrack(track, Players.PlayerRemoving:Connect(function(plr) clearESP(plr) end))
 
-print("[Aveh] esp ok")
-
--- ============================================================
--- NOCLIP
--- ============================================================
 addTrack(track, RunService.Stepped:Connect(function()
     if not C.Noclip then return end
     local char = getChar(); if not char then return end
@@ -625,9 +755,6 @@ addTrack(track, RunService.Stepped:Connect(function()
     end
 end))
 
--- ============================================================
--- FLY
--- ============================================================
 local flyBV = nil
 local function ensureFlyBV()
     local root = getChar() and getChar():FindFirstChild("HumanoidRootPart")
@@ -705,20 +832,14 @@ end
 
 local flyAnimTrack, flyAnimChar, flyAnimLoading = nil, nil, false
 local function stopFlyAnim()
-    if flyAnimTrack then
-        pcall(function() flyAnimTrack:Stop(0.15) end)
-        flyAnimTrack = nil
-    end
+    if flyAnimTrack then pcall(function() flyAnimTrack:Stop(0.15) end); flyAnimTrack = nil end
     flyAnimChar = nil
 end
 local function tryPlayAnim(hum, animId)
     local anim = Instance.new("Animation")
     anim.AnimationId = "rbxassetid://" .. tostring(animId)
     local animator = hum:FindFirstChildOfClass("Animator")
-    if not animator then
-        animator = Instance.new("Animator")
-        animator.Parent = hum
-    end
+    if not animator then animator = Instance.new("Animator"); animator.Parent = hum end
     local ok, trackA = pcall(function() return animator:LoadAnimation(anim) end)
     if ok and trackA then
         trackA.Priority = Enum.AnimationPriority.Action4
@@ -780,9 +901,24 @@ local function applyFlyTilt(dt)
     root.CFrame = cur:Lerp(desired, math.clamp(dt * 6, 0, 1))
 end
 
--- ============================================================
--- MUSIC
--- ============================================================
+local lastActivity = tick()
+addTrack(track, UserInputService.InputBegan:Connect(function() lastActivity = tick() end))
+addTrack(track, RunService.Heartbeat:Connect(function()
+    if not C.AntiAFK then return end
+    if tick() - lastActivity < 60 then return end
+    local hum = getHum()
+    if hum then pcall(function() hum.Jump = true end) end
+    lastActivity = tick()
+end))
+addTrack(track, RunService.Heartbeat:Connect(function()
+    if not C.AutoJump then return end
+    local hum = getHum()
+    if not hum then return end
+    if hum.FloorMaterial ~= Enum.Material.Air and hum.Health > 0 then
+        pcall(function() hum.Jump = true end)
+    end
+end))
+
 local musicSound = nil
 local function ensureMusicSound()
     if musicSound and musicSound.Parent then return musicSound end
@@ -807,9 +943,6 @@ local function musicStop()
     if musicSound then pcall(function() musicSound:Stop() end) end
 end
 
--- ============================================================
--- HEARTBEAT
--- ============================================================
 addTrack(track, RunService.Heartbeat:Connect(function(dt)
     if C.Fly then
         ensureFlyBV()
@@ -833,12 +966,13 @@ addTrack(track, RunService.Heartbeat:Connect(function(dt)
         if hum then hum.AutoRotate = true end
     end
     local hum = getHum()
-    if hum and C.SpeedOn and C.SpeedHack ~= hum.WalkSpeed then
-        hum.WalkSpeed = C.SpeedHack
+    if hum then
+        if C.SpeedOn and C.SpeedHack ~= hum.WalkSpeed then hum.WalkSpeed = C.SpeedHack end
+        if C.JumpPower ~= 50 and hum.UseJumpPower and hum.JumpPower ~= C.JumpPower then
+            hum.JumpPower = C.JumpPower
+        end
     end
 end))
-
-print("[Aveh] fly/music ok")
 
 -- ============================================================
 -- UI
@@ -854,44 +988,74 @@ local function destroyUI()
     aimBtnRef = nil; previewRef = nil
 end
 
-local function buildPreviewFigure(parent)
+local function buildAvatarPreview(parent)
+    local char = getChar()
     local model = Instance.new("Model")
-    model.Name = "PreviewFigure"
-    local baseColor = Color3.fromRGB(200,200,215)
-    local function mk(name, size, cf)
-        local p = Instance.new("Part")
-        p.Name = name; p.Size = size; p.CFrame = cf
-        p.Color = baseColor; p.Anchored = true; p.CanCollide = false
-        p.Parent = model
-        return p
+    model.Name = "AvehPreviewAvatar"
+    if char then
+        for _, obj in ipairs(char:GetChildren()) do
+            local ok = false
+            if obj:IsA("BasePart") then ok = true
+            elseif obj:IsA("Decal") or obj:IsA("Texture") then ok = true
+            elseif obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic") then ok = true
+            elseif obj:IsA("BodyColors") or obj:IsA("CharacterMesh") then ok = true
+            elseif obj:IsA("Accessory") then ok = true
+            elseif obj:IsA("Folder") and obj.Name ~= "AvehHPAnchor" then ok = true
+            end
+            if ok then local c = obj:Clone(); c.Parent = model end
+        end
     end
-    mk("Head", Vector3.new(0.7,0.7,0.7), CFrame.new(0,2.05,0))
-    mk("UpperTorso", Vector3.new(1,0.9,0.55), CFrame.new(0,1.25,0))
-    mk("LowerTorso", Vector3.new(1,0.6,0.55), CFrame.new(0,0.55,0))
-    mk("LeftUpperArm", Vector3.new(0.45,0.75,0.45), CFrame.new(0.75,1.4,0))
-    mk("LeftLowerArm", Vector3.new(0.4,0.7,0.4), CFrame.new(0.75,0.6,0))
-    mk("RightUpperArm", Vector3.new(0.45,0.75,0.45), CFrame.new(-0.75,1.4,0))
-    mk("RightLowerArm", Vector3.new(0.4,0.7,0.4), CFrame.new(-0.75,0.6,0))
-    mk("LeftUpperLeg", Vector3.new(0.5,0.9,0.5), CFrame.new(0.3,0,0))
-    mk("LeftLowerLeg", Vector3.new(0.45,0.85,0.45), CFrame.new(0.3,-0.9,0))
-    mk("RightUpperLeg", Vector3.new(0.5,0.9,0.5), CFrame.new(-0.3,0,0))
-    mk("RightLowerLeg", Vector3.new(0.45,0.85,0.45), CFrame.new(-0.3,-0.9,0))
-    model.PrimaryPart = model.UpperTorso
+    for _, d in ipairs(model:GetDescendants()) do
+        if d:IsA("BasePart") then
+            d.Anchored = true; d.CanCollide = false
+            d.CanQuery = false; d.CanTouch = false; d.Massless = true
+        elseif d:IsA("Script") or d:IsA("LocalScript") or d:IsA("Animator") then
+            d:Destroy()
+        end
+    end
+    if not model:FindFirstChildWhichIsA("BasePart") then
+        local function mk(name, size, cf)
+            local p = Instance.new("Part")
+            p.Name = name; p.Size = size; p.CFrame = cf
+            p.Color = Color3.fromRGB(200,200,215)
+            p.Anchored = true; p.CanCollide = false; p.Parent = model
+        end
+        mk("Head", Vector3.new(0.7,0.7,0.7), CFrame.new(0,2.05,0))
+        mk("UpperTorso", Vector3.new(1,0.9,0.55), CFrame.new(0,1.25,0))
+        mk("LowerTorso", Vector3.new(1,0.6,0.55), CFrame.new(0,0.55,0))
+        mk("LeftUpperArm", Vector3.new(0.45,0.75,0.45), CFrame.new(0.75,1.4,0))
+        mk("LeftLowerArm", Vector3.new(0.4,0.7,0.4), CFrame.new(0.75,0.6,0))
+        mk("RightUpperArm", Vector3.new(0.45,0.75,0.45), CFrame.new(-0.75,1.4,0))
+        mk("RightLowerArm", Vector3.new(0.4,0.7,0.4), CFrame.new(-0.75,0.6,0))
+        mk("LeftUpperLeg", Vector3.new(0.5,0.9,0.5), CFrame.new(0.3,0,0))
+        mk("LeftLowerLeg", Vector3.new(0.45,0.85,0.45), CFrame.new(0.3,-0.9,0))
+        mk("RightUpperLeg", Vector3.new(0.5,0.9,0.5), CFrame.new(-0.3,0,0))
+        mk("RightLowerLeg", Vector3.new(0.45,0.85,0.45), CFrame.new(-0.3,-0.9,0))
+    end
+    local primary = model:FindFirstChild("HumanoidRootPart")
+        or model:FindFirstChild("UpperTorso")
+        or model:FindFirstChild("Torso")
+        or model:FindFirstChildWhichIsA("BasePart")
+    model.PrimaryPart = primary
+    if primary then
+        local anchor = primary.CFrame
+        for _, d in ipairs(model:GetDescendants()) do
+            if d:IsA("BasePart") then d.CFrame = anchor:ToObjectSpace(d.CFrame) end
+        end
+    end
     model.Parent = parent
     return model
 end
 
 local function applyPreviewMode(model, mode)
-    local oldH = model:FindFirstChildOfClass("Highlight")
-    if oldH then oldH:Destroy() end
-    local oldL = model:FindFirstChild("AvehPreviewLight")
-    if oldL then oldL:Destroy() end
-    local cfg = MODES[mode]
-    if not cfg then return end
-    for _, p in ipairs(model:GetChildren()) do
-        if p:IsA("BasePart") then
-            p.Color = Color3.fromRGB(200,200,215)
-            p.Material = Enum.Material.SmoothPlastic
+    local oldH = model:FindFirstChildOfClass("Highlight"); if oldH then oldH:Destroy() end
+    local oldL = model:FindFirstChild("AvehPreviewLight"); if oldL then oldL:Destroy() end
+    local cfg = MODES[mode]; if not cfg then return end
+    if cfg.body then
+        for _, p in ipairs(model:GetDescendants()) do
+            if p:IsA("BasePart") then
+                pcall(function() p.Color = cfg.body; p.Material = cfg.mat or Enum.Material.SmoothPlastic end)
+            end
         end
     end
     local h = Instance.new("Highlight")
@@ -902,14 +1066,6 @@ local function applyPreviewMode(model, mode)
     h.FillTransparency = cfg.fillT
     h.OutlineTransparency = cfg.outlineT
     h.Parent = model
-    if cfg.body then
-        for _, p in ipairs(model:GetChildren()) do
-            if p:IsA("BasePart") then
-                p.Color = cfg.body
-                p.Material = cfg.mat or Enum.Material.SmoothPlastic
-            end
-        end
-    end
     local l = Instance.new("PointLight")
     l.Name = "AvehPreviewLight"
     l.Color = cfg.light or Color3.fromRGB(255,60,60)
@@ -936,7 +1092,7 @@ local function buildUI()
     gui.Parent = PG
 
     local winW = math.clamp(340 * SF, 240, vp().X - 20)
-    local winH = math.clamp(490 * SF, 300, vp().Y - 60)
+    local winH = math.clamp(510 * SF, 300, vp().Y - 60)
 
     local Main = Instance.new("Frame")
     Main.AnchorPoint = Vector2.new(0.5,0.5)
@@ -974,7 +1130,7 @@ local function buildUI()
     Title.BackgroundTransparency = 1
     Title.Text = S.title; Title.TextColor3 = accent
     Title.Font = Enum.Font.GothamBold
-    Title.TextSize = math.floor(14*SF)
+    Title.TextSize = math.floor(13*SF)
     Title.TextXAlignment = Enum.TextXAlignment.Left
     Title.Parent = Main
 
@@ -1077,7 +1233,7 @@ local function buildUI()
         label.Position = UDim2.new(0, 16*SF, 0, 0)
         label.BackgroundTransparency = 1; label.Text = name
         label.TextColor3 = T.text; label.Font = Enum.Font.Gotham
-        label.TextSize = math.floor(14*SF)
+        label.TextSize = math.floor(13*SF)
         label.TextXAlignment = Enum.TextXAlignment.Left; label.Parent = row
         local tW, tH = math.floor(42*SF), math.floor(22*SF)
         local tf = Instance.new("Frame")
@@ -1116,7 +1272,7 @@ local function buildUI()
         top.Position = UDim2.new(0, 16*SF, 0, 6*SF)
         top.BackgroundTransparency = 1; top.Text = name
         top.TextColor3 = T.text; top.Font = Enum.Font.Gotham
-        top.TextSize = math.floor(14*SF)
+        top.TextSize = math.floor(13*SF)
         top.TextXAlignment = Enum.TextXAlignment.Left; top.Parent = row
         local val = Instance.new("TextLabel")
         val.Size = UDim2.new(0, 85*SF, 0, 22*SF)
@@ -1124,7 +1280,7 @@ local function buildUI()
         val.BackgroundTransparency = 1
         val.Text = fmt and string.format(fmt, initial) or tostring(initial)
         val.TextColor3 = accent; val.Font = Enum.Font.GothamBold
-        val.TextSize = math.floor(14*SF)
+        val.TextSize = math.floor(13*SF)
         val.TextXAlignment = Enum.TextXAlignment.Right; val.Parent = row
         local bar = Instance.new("Frame")
         bar.Size = UDim2.new(1, -32*SF, 0, math.floor(6*SF))
@@ -1251,6 +1407,7 @@ local function buildUI()
             if aimBtnRef and aimBtnRef.Parent then aimBtnRef.Visible = C.Enabled and not s end
         end)
         toggle(S.team_check, C.TeamCheck, function(s) C.TeamCheck = s; lockedTarget = nil end)
+        toggle(S.ignore_friends, C.IgnoreFriends, function(s) C.IgnoreFriends = s; lockedTarget = nil end)
         slider(S.smooth, 0.01, 0.95, C.Smoothness, "%.2f", function(v) C.Smoothness = v end)
         slider(S.fov, 20, 500, C.FOV, "%.0f", function(v) C.FOV = v; updateFovCircle(0) end)
         slider(S.maxdist, 50, 2000, C.MaxDist, "%.0f", function(v) C.MaxDist = v end)
@@ -1264,6 +1421,8 @@ local function buildUI()
         toggle(S.esp_health, C.ESPHealth, function(s) C.ESPHealth = s end)
         toggle(S.esp_box, C.ESPBox, function(s) C.ESPBox = s end)
         toggle(S.esp_skel, C.ESPSkeleton, function(s) C.ESPSkeleton = s end)
+        toggle(S.esp_tracers, C.ESPTracers, function(s) C.ESPTracers = s end)
+        toggle(S.esp_name, C.ESPName, function(s) C.ESPName = s end)
         section(S.esp_mode)
         local function setMode(v)
             C.ESPMode = v
@@ -1291,25 +1450,36 @@ local function buildUI()
 
         section(S.section_preview)
         local vf = Instance.new("ViewportFrame")
-        vf.Size = UDim2.new(1, 0, 0, math.floor(220 * SF))
+        vf.Size = UDim2.new(1, 0, 0, math.floor(250 * SF))
         vf.BackgroundColor3 = T.bg2
         vf.BorderSizePixel = 0
-        vf.Ambient = Color3.fromRGB(200,200,220)
+        vf.Ambient = Color3.fromRGB(180,180,200)
         vf.LightColor = Color3.fromRGB(255,255,255)
         vf.LightDirection = Vector3.new(-0.4,-1,-0.6)
         vf.Parent = Scroll
         Instance.new("UICorner", vf).CornerRadius = UDim.new(0,10)
         local vfStroke = Instance.new("UIStroke", vf)
         vfStroke.Color = accent; vfStroke.Thickness = 1.5
-
-        local model = buildPreviewFigure(vf)
+        local model = buildAvatarPreview(vf)
         applyPreviewMode(model, C.ESPMode)
-
+        local minY, maxY = math.huge, -math.huge
+        for _, d in ipairs(model:GetDescendants()) do
+            if d:IsA("BasePart") then
+                local p = d.Position
+                minY = math.min(minY, p.Y - d.Size.Y/2)
+                maxY = math.max(maxY, p.Y + d.Size.Y/2)
+            end
+        end
+        local height = maxY - minY
+        local centerY = (minY + maxY) / 2
+        if not height or height ~= height or height == math.huge or height <= 0 then
+            height, centerY = 5, 0
+        end
+        local dist = height * 1.55
         local previewCam = Instance.new("Camera")
         previewCam.Parent = vf
         vf.CurrentCamera = previewCam
-        previewCam.CFrame = CFrame.new(Vector3.new(0.5, 1.2, -5.5), Vector3.new(0, 0.7, 0))
-
+        previewCam.CFrame = CFrame.new(Vector3.new(0, centerY, -dist), Vector3.new(0, centerY, 0))
         previewRef = { model = model, camera = previewCam, vf = vf }
 
     elseif state.tab == "mov" then
@@ -1321,6 +1491,10 @@ local function buildUI()
         toggle(S.fly_tilt, C.FlyTilt, function(s) C.FlyTilt = s end)
         slider(S.fly_speed, 10, 300, C.FlySpeed, "%.0f", function(v) C.FlySpeed = v end)
         slider(S.speed, 8, 300, C.SpeedHack, "%.0f", function(v) C.SpeedHack = v; C.SpeedOn = true end)
+        section(S.section_util)
+        toggle(S.antiafk, C.AntiAFK, function(s) C.AntiAFK = s end)
+        toggle(S.autojump, C.AutoJump, function(s) C.AutoJump = s end)
+        slider(S.jumppower, 30, 200, C.JumpPower, "%.0f", function(v) C.JumpPower = v end)
 
     elseif state.tab == "music" then
         section(S.section_music)
@@ -1344,9 +1518,7 @@ local function buildUI()
             b.AutoButtonColor = false; b.Parent = btnRow
             Instance.new("UICorner", b).CornerRadius = UDim.new(0,6)
             b.MouseButton1Click:Connect(function()
-                if idBox then
-                    C.MusicId = tostring(idBox.Text):gsub("[^%d]","")
-                end
+                if idBox then C.MusicId = tostring(idBox.Text):gsub("[^%d]","") end
                 pcall(cb)
             end)
         end
@@ -1367,6 +1539,8 @@ local function buildUI()
         picker({
             {value="dark", label=S.theme_dark}, {value="light", label=S.theme_light},
         }, state.theme, function(v) state.theme = v; buildUI() end)
+        section(S.section_visual)
+        toggle(S.snow, C.Snow, function(s) C.Snow = s end)
         section(S.section_accent)
         local swatchRow = Instance.new("Frame")
         swatchRow.Size = UDim2.new(1,0,0, math.floor(64*SF))
@@ -1403,7 +1577,6 @@ local function buildUI()
         resetB.Parent = swatchRow
         Instance.new("UICorner", resetB).CornerRadius = UDim.new(0,6)
         resetB.MouseButton1Click:Connect(function() state.customColor = nil; buildUI() end)
-
         local customRow = Instance.new("Frame")
         customRow.Size = UDim2.new(1,0,0, math.floor(44*SF))
         customRow.BackgroundColor3 = T.row; customRow.Parent = Scroll
@@ -1438,7 +1611,6 @@ local function buildUI()
                 end)
             end
         end)
-
         section(S.section_size)
         slider(S.section_size, 0.5, 1.6, state.scale, "%.2f",
             function(v) state.scale = v end, function() buildUI() end)
@@ -1573,11 +1745,6 @@ local function buildUI()
     end))
 end
 
-print("[Aveh] buildUI ok")
-
--- ============================================================
--- РЕНДЕР
--- ============================================================
 addTrack(track, RunService.RenderStepped:Connect(function(dt)
     pcall(updateFovCircle, dt)
     pcall(updateESP, dt)
@@ -1600,9 +1767,6 @@ RunService:BindToRenderStep("AvehAimLoop", Enum.RenderPriority.Camera.Value + 1,
     end)
 end)
 
--- ============================================================
--- CLEANUP
--- ============================================================
 _G.AvehAimbotCleanup = function()
     pcall(function() RunService:UnbindFromRenderStep("AvehAimLoop") end)
     stopFlyBV(); clearFlyAura(); stopFlyAnim()
@@ -1610,9 +1774,10 @@ _G.AvehAimbotCleanup = function()
     if hum then
         hum.AutoRotate = true
         hum.WalkSpeed = 16
-        hum.JumpPower = 50
+        if hum.UseJumpPower then hum.JumpPower = 50 end
     end
     C.SpeedHack = 16; C.SpeedOn = false; C.Enabled = false; C.Fly = false; C.Noclip = false
+    C.AutoJump = false; C.AntiAFK = false
     musicStop()
     if musicSound then pcall(function() musicSound:Destroy() end); musicSound = nil end
     for _, c in ipairs(track) do pcall(function() c:Disconnect() end) end
@@ -1620,14 +1785,15 @@ _G.AvehAimbotCleanup = function()
     local all = {}
     for plr in pairs(espTracked) do table.insert(all, plr) end
     for _, plr in ipairs(all) do clearESP(plr) end
+    for plr in pairs(tracerCache) do clearTracer(plr) end
     bodySnapshots = {}
     pcall(function() fovGui:Destroy() end)
     pcall(function() if gui then gui:Destroy() end end)
 end
 
--- ============================================================
--- СТАРТ
--- ============================================================
+refreshFriends()
+pcall(function() LP.FriendStatusChanged:Connect(refreshFriends) end)
+
 local ok, err = pcall(buildUI)
 if not ok then
     print("[Aveh] ERROR in buildUI:", err)
@@ -1635,6 +1801,9 @@ if not ok then
 end
 updateFovCircle(0)
 addTrack(track, LP.CharacterAdded:Connect(function()
-    task.wait(0.1); stopFlyAnim(); updateFovCircle(0)
+    task.wait(0.6)
+    stopFlyAnim()
+    updateFovCircle(0)
+    if state.tab == "esp" and gui then pcall(buildUI) end
 end))
-print("[Aveh] loaded OK")
+print("[Aveh] v13.1 loaded OK")
